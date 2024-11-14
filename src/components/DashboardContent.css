@@ -1,0 +1,35 @@
+.dashboard-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  
+  .card {
+    width: 200px;
+    height: 100px;
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+  }
+  
+  .blue {
+    background-color: #007bff;
+  }
+  
+  .red {
+    background-color: #ff6b6b;
+  }
+  
+  .green {
+    background-color: #51cf66;
+  }
+  
+  .yellow {
+    background-color: #ffa94d;
+  }
+  
