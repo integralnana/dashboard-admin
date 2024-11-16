@@ -1,108 +1,289 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
+import { db } from "../config/firebase";
+import {
+  collection,
+  getDocs,
+  updateDoc,
+  doc,
+  getDoc,
+} from "firebase/firestore";
+import "./ReportBox.css";
 
 const ReportBox = () => {
+  const [reports, setReports] = useState([]);
+  const [users, setUsers] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("pending");
 
-  const mockData = [
-    { id: 1, userid: 'USR001', username: 'user1', email: 'user1@example.com', date: '2024-11-15' },
-    { id: 2, userid: 'USR002', username: 'user2', email: 'user2@example.com', date: '2024-11-15' },
-    { id: 3, userid: 'USR003', username: 'user3', email: 'user3@example.com', date: '2024-11-15' },
-    { id: 4, userid: 'USR004', username: 'user4', email: 'user4@example.com', date: '2024-11-15' },
-    { id: 5, userid: 'USR005', username: 'user5', email: 'user5@example.com', date: '2024-11-15' },
-    { id: 6, userid: 'USR006', username: 'user6', email: 'user6@example.com', date: '2024-11-15' },
-  ];
+  const fetchUserDetails = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, "users", userId));
+      if (userDoc.exists()) {
+        return userDoc.data();
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const fetchReportsAndUsers = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "reports"));
+        const reportsData = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        const userIds = new Set();
+        reportsData.forEach((report) => {
+          if (report.reporterId) userIds.add(report.reporterId);
+          if (report.reportToId) userIds.add(report.reportToId);
+        });
+
+        const usersData = {};
+        await Promise.all(
+          Array.from(userIds).map(async (userId) => {
+            const userData = await fetchUserDetails(userId);
+            if (userData) {
+              usersData[userId] = userData;
+            }
+          })
+        );
+
+        setReports(reportsData);
+        setUsers(usersData);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchReportsAndUsers();
+  }, []);
 
   const handleOpenModal = (report) => {
     setSelectedReport(report);
     setIsModalOpen(true);
+    document.body.style.overflow = "hidden";
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedReport(null);
+    document.body.style.overflow = "unset";
   };
 
-  return (
-    <div className="w-full min-h-screen bg-white p-6">
-      {/* Header */}
-      <h2 className="text-lg font-medium mb-4">กล่องรายงาน</h2>
+  const handleAction = async (reportId, reportToId, action) => {
+    try {
+      if (action === "ban") {
+        const userRef = doc(db, "users", reportToId);
+        await updateDoc(userRef, {
+          status: 2,
+        });
+      }
 
-      {/* Table */}
-      <div className="w-full border border-gray-300 rounded-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-[#2196F3] text-white">
-              <th className="px-4 py-2 text-left border-r border-white/30 w-16">userid</th>
-              <th className="px-4 py-2 text-left border-r border-white/30">username</th>
-              <th className="px-4 py-2 text-left border-r border-white/30">email</th>
-              <th className="px-4 py-2 text-left border-r border-white/30">วันที่รายงาน</th>
-              <th className="px-4 py-2 text-left w-40"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockData.map((row, index) => (
-              <tr key={row.id} className={index % 2 === 0 ? 'bg-[#E6E6E6]' : 'bg-[#D4D4D4]'}>
-                <td className="px-4 py-2 border-r border-white/30">{row.id}</td>
-                <td className="px-4 py-2 border-r border-white/30">{row.username}</td>
-                <td className="px-4 py-2 border-r border-white/30">{row.email}</td>
-                <td className="px-4 py-2 border-r border-white/30">{row.date}</td>
-                <td className="px-4 py-2 text-right">
-                  <button 
-                    className="bg-[#666666] text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
-                    onClick={() => handleOpenModal(row)}
-                  >
-                    รายละเอียดเพิ่มเติม
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      const reportRef = doc(db, "reports", reportId);
+      await updateDoc(reportRef, {
+        status: "solved",
+      });
+
+      setReports(
+        reports.map((report) =>
+          report.id === reportId ? { ...report, status: "solved" } : report
+        )
+      );
+
+      handleCloseModal();
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
+  };
+
+  const getReportTypeLabel = (type) => {
+    const types = {
+      spam: "สแปม",
+      inappropriate: "เนื้อหาไม่เหมาะสม",
+      harassment: "การคุกคาม",
+      other: "อื่นๆ",
+    };
+    return types[type] || type;
+  };
+
+  const getUserDisplayName = (userId) => {
+    if (!userId) return "ไม่ระบุผู้ใช้";
+    const user = users[userId];
+    return user
+      ? user.displayName || user.username || userId
+      : "ไม่พบข้อมูลผู้ใช้";
+  };
+
+  const filteredReports = reports.filter((report) => {
+    if (activeTab === "pending") {
+      return report.status === "pending";
+    } else {
+      return report.status === "solved" || report.status === "rejected";
+    }
+  });
+
+  const ReportTable = ({ reports }) => (
+    <table className="report-table">
+      <thead>
+        <tr>
+          <th>ผู้รายงาน</th>
+          <th>ผู้ถูกรายงาน</th>
+          <th>ประเภท</th>
+          <th>วันที่รายงาน</th>
+          <th>สถานะ</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {reports.map((report, index) => (
+          <tr
+            key={report.id}
+            className={index % 2 === 0 ? "row-even" : "row-odd"}
+          >
+            <td>{getUserDisplayName(report.reporterId)}</td>
+            <td>{getUserDisplayName(report.reportToId)}</td>
+            <td>{getReportTypeLabel(report.reportType)}</td>
+            <td>
+              {new Date(report.createdAt?.toDate()).toLocaleDateString("th-TH")}
+            </td>
+            <td>
+              <span className={`status-badge ${report.status}`}>
+                {report.status === "pending"
+                  ? "รอดำเนินการ"
+                  : report.status === "solved"
+                  ? "ดำเนินการแล้ว"
+                  : "ปฏิเสธ"}
+              </span>
+            </td>
+            <td>
+              {report.status === "pending" && (
+                <button
+                  className="manage-button"
+                  onClick={() => handleOpenModal(report)}
+                >
+                  จัดการ
+                </button>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
+  if (loading) {
+    return <div className="loading-container">กำลังโหลด...</div>;
+  }
+
+  return (
+    <div className="report-container">
+      <h2 className="report-title">กล่องรายงาน</h2>
+
+      <div className="tabs">
+        <button
+          className={`tab ${activeTab === "pending" ? "active" : ""}`}
+          onClick={() => setActiveTab("pending")}
+        >
+          รอดำเนินการ ({reports.filter((r) => r.status === "pending").length})
+        </button>
+        <button
+          className={`tab ${activeTab === "solved" ? "active" : ""}`}
+          onClick={() => setActiveTab("solved")}
+        >
+          ดำเนินการแล้ว ({reports.filter((r) => r.status !== "pending").length})
+        </button>
       </div>
 
-      {/* Modal */}
+      <div className="table-container">
+        {filteredReports.length > 0 ? (
+          <ReportTable reports={filteredReports} />
+        ) : (
+          <div className="no-reports">ไม่มีรายการ</div>
+        )}
+      </div>
+
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-[500px]">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-medium">หัวข้อเรื่อง</h3>
-              <button 
-                onClick={handleCloseModal}
-                className="text-gray-500 hover:text-gray-700"
-              >
+        <div className="modal-overlay" onClick={handleCloseModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>รายละเอียดการรายงาน</h3>
+              <button className="close-button" onClick={handleCloseModal}>
                 ✕
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="space-y-4">
-              <div>
-                <label className="block mb-1 text-sm">ชื่อผู้ส่ง</label>
-                <input 
-                  type="text" 
-                  value={selectedReport?.username || ''} 
-                  readOnly
-                  className="w-full p-2 border rounded"
-                />
+            <div className="modal-body">
+              <div className="form-group">
+                <label>ผู้รายงาน</label>
+                <p className="info-box">
+                  {getUserDisplayName(selectedReport?.reporterId)}
+                </p>
               </div>
 
-              <div>
-                <label className="block mb-1 text-sm">ชื่อผู้ถูกรายงาน</label>
-                <input 
-                  type="text"
-                  readOnly 
-                  className="w-full p-2 border rounded"
-                />
+              <div className="form-group">
+                <label>ผู้ถูกรายงาน</label>
+                <p className="info-box">
+                  {getUserDisplayName(selectedReport?.reportToId)}
+                </p>
               </div>
 
-              <div>
-                <label className="block mb-1 text-sm">เนื้อหา</label>
-                <textarea 
-                  className="w-full p-2 border rounded h-32 resize-none"
-                  readOnly
-                />
+              <div className="form-group">
+                <label>ประเภท</label>
+                <p className="info-box">
+                  {getReportTypeLabel(selectedReport?.reportType)}
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label>ความคิดเห็น</label>
+                <p className="comment-box">{selectedReport?.reportDesc}</p>
+              </div>
+
+              {selectedReport?.imageUrl && (
+                <div className="form-group">
+                  <label>รูปภาพ</label>
+                  <img
+                    src={selectedReport.imageUrl}
+                    alt="Report evidence"
+                    className="evidence-image"
+                  />
+                </div>
+              )}
+
+              <div className="button-group">
+                <button
+                  className="ban-button"
+                  onClick={() =>
+                    handleAction(
+                      selectedReport.id,
+                      selectedReport.reportToId,
+                      "ban"
+                    )
+                  }
+                >
+                  แบน
+                </button>
+                <button
+                  className="dismiss-button"
+                  onClick={() =>
+                    handleAction(
+                      selectedReport.id,
+                      selectedReport.reportToId,
+                      "dismiss"
+                    )
+                  }
+                >
+                  ปล่อย
+                </button>
               </div>
             </div>
           </div>
