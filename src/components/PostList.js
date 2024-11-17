@@ -18,6 +18,7 @@ const PostList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
+  const [selectedGenre, setSelectedGenre] = useState("all"); // เพิ่ม state สำหรับตัวกรอง
   const itemsPerPage = 10;
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [postToDelete, setPostToDelete] = useState(null);
@@ -28,6 +29,17 @@ const PostList = () => {
         return "โอนก่อน";
       case 2:
         return "จ่ายหลังนัดรับ";
+      default:
+        return "ไม่ระบุ";
+    }
+  };
+
+  const getGroupGenre = (genre) => {
+    switch (genre) {
+      case 1:
+        return "แชร์ซื้อสินค้า";
+      case 2:
+        return "สินค้าลดราคา";
       default:
         return "ไม่ระบุ";
     }
@@ -48,6 +60,7 @@ const PostList = () => {
       console.error("Error deleting post:", error);
     }
   };
+
   const cancelDeletePost = () => {
     setShowDeleteConfirmation(false);
     setPostToDelete(null);
@@ -120,7 +133,6 @@ const PostList = () => {
       const membersQuery = query(collection(db, `groups/${groupId}/userlist`));
       const querySnapshot = await getDocs(membersQuery);
 
-      // Fetch all member data in parallel
       const membersPromises = querySnapshot.docs.map(async (doc) => {
         const userData = await fetchUserData(doc.id);
         return {
@@ -141,12 +153,17 @@ const PostList = () => {
     fetchPosts();
   }, []);
 
-  const filteredPosts = posts.filter(
-    (post) =>
+  const filteredPosts = posts.filter((post) => {
+    const matchesSearch =
       post.groupName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       post.groupDesc?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      post.groupCate?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      post.groupCate?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesGenre =
+      selectedGenre === "all" || post.groupGenre === parseInt(selectedGenre);
+
+    return matchesSearch && matchesGenre;
+  });
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -160,26 +177,31 @@ const PostList = () => {
 
   return (
     <div className="post-list-container">
-      {/* Search Bar */}
+      {/* Search and Filter Bar */}
       <div className="search-container">
-        <div style={{ position: "relative" }}>
-          <input
-            type="text"
-            placeholder="ค้นหากลุ่ม..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          <Search
-            style={{
-              position: "absolute",
-              left: "12px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "#999",
-            }}
-            size={20}
-          />
+        <div className="flex gap-4 mb-4">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="ค้นหากลุ่ม..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+            <Search
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+              size={20}
+            />
+          </div>
+          <select
+            value={selectedGenre}
+            onChange={(e) => setSelectedGenre(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-md"
+          >
+            <option value="all">ทั้งหมด</option>
+            <option value="1">แชร์ซื้อสินค้า</option>
+            <option value="2">สินค้าลดราคา</option>
+          </select>
         </div>
       </div>
 
@@ -192,7 +214,8 @@ const PostList = () => {
               <th>ชื่อกลุ่ม</th>
               <th>หมวดหมู่</th>
               <th>รายละเอียด</th>
-              <th>ประเภท</th>
+              <th>ประเภทการซื้อ</th>
+              <th>ประเภทสินค้า</th>
               <th>สถานะ</th>
               <th>จำนวนสมาชิก</th>
               <th>ดูสมาชิก</th>
@@ -217,6 +240,7 @@ const PostList = () => {
                 <td>{post.groupCate}</td>
                 <td>{post.groupDesc}</td>
                 <td>{getGroupType(post.groupType)}</td>
+                <td>{getGroupGenre(post.groupGenre)}</td>
                 <td>
                   <span className={getStatusTag(post.groupStatus)}>
                     {getGroupStatus(post.groupStatus)}
@@ -346,6 +370,8 @@ const PostList = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
       {showDeleteConfirmation && (
         <div
           style={{
