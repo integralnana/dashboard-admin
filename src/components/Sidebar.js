@@ -20,6 +20,9 @@ function Sidebar() {
         <li>
           <Link to="/report-box">กล่องรายงาน</Link>
         </li>
+        <li>
+          <Link to="/vip-list">คำขอ Vip</Link>
+        </li>
       </ul>
     </div>
   );

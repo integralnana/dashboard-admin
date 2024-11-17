@@ -16,6 +16,8 @@ const ReportBox = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [confirmationAction, setConfirmationAction] = useState(null);
 
   const fetchUserDetails = async (userId) => {
     try {
@@ -28,6 +30,33 @@ const ReportBox = () => {
       console.error("Error fetching user:", error);
       return null;
     }
+  };
+
+  const handleOpenConfirmation = (action) => {
+    setConfirmationAction(action);
+    setShowConfirmation(true);
+  };
+
+  const handleCloseConfirmation = () => {
+    setShowConfirmation(false);
+    setConfirmationAction(null);
+  };
+
+  const getConfirmationMessage = (action) => {
+    return action === "ban"
+      ? `คุณแน่ใจหรือไม่ที่จะแบนผู้ใช้ ${getUserDisplayName(
+          selectedReport?.reportToId
+        )}?`
+      : `คุณแน่ใจหรือไม่ที่จะปล่อยรายงานนี้?`;
+  };
+
+  const handleConfirmedAction = async () => {
+    await handleAction(
+      selectedReport.id,
+      selectedReport.reportToId,
+      confirmationAction
+    );
+    handleCloseConfirmation();
   };
 
   useEffect(() => {
@@ -84,7 +113,7 @@ const ReportBox = () => {
       if (action === "ban") {
         const userRef = doc(db, "users", reportToId);
         await updateDoc(userRef, {
-          status: 2,
+          status: "0",
         });
       }
 
@@ -262,27 +291,45 @@ const ReportBox = () => {
               <div className="button-group">
                 <button
                   className="ban-button"
-                  onClick={() =>
-                    handleAction(
-                      selectedReport.id,
-                      selectedReport.reportToId,
-                      "ban"
-                    )
-                  }
+                  onClick={() => handleOpenConfirmation("ban")}
                 >
                   แบน
                 </button>
                 <button
                   className="dismiss-button"
-                  onClick={() =>
-                    handleAction(
-                      selectedReport.id,
-                      selectedReport.reportToId,
-                      "dismiss"
-                    )
-                  }
+                  onClick={() => handleOpenConfirmation("dismiss")}
                 >
                   ปล่อย
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Confirmation Modal */}
+      {showConfirmation && (
+        <div className="modal-overlay">
+          <div className="confirmation-modal">
+            <div className="confirmation-content">
+              <h4>ยืนยันการดำเนินการ</h4>
+              <p>{getConfirmationMessage(confirmationAction)}</p>
+              <div className="confirmation-buttons">
+                <button
+                  className={`confirm-button ${
+                    confirmationAction === "ban"
+                      ? "ban-button"
+                      : "dismiss-button"
+                  }`}
+                  onClick={handleConfirmedAction}
+                >
+                  ยืนยัน
+                </button>
+                <button
+                  className="cancel-button"
+                  onClick={handleCloseConfirmation}
+                >
+                  ยกเลิก
                 </button>
               </div>
             </div>

@@ -17,6 +17,8 @@ import {
   orderBy,
   doc,
   getDoc,
+  collectionGroup,
+  where,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 
@@ -30,9 +32,38 @@ const UserList = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [reports, setReports] = useState([]);
+  const [userGroups, setUserGroups] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState("reviews");
-  const [usernames, setUsernames] = useState({}); // Cache for usernames
+  const [usernames, setUsernames] = useState({});
+
+  const fetchUserGroups = async (userId) => {
+    try {
+      const userListRef = collectionGroup(db, "userlist");
+      const q = query(userListRef, where("userId", "==", userId));
+      const querySnapshot = await getDocs(q);
+
+      const groupPromises = querySnapshot.docs.map(async (doc) => {
+        const groupRef = doc.ref.parent.parent;
+        const groupDoc = await getDoc(groupRef);
+
+        if (groupDoc.exists()) {
+          return {
+            id: groupDoc.id,
+            ...groupDoc.data(),
+          };
+        }
+        return null;
+      });
+
+      const groups = (await Promise.all(groupPromises)).filter(
+        (group) => group !== null
+      );
+      setUserGroups(groups);
+    } catch (error) {
+      console.error("Error fetching user groups:", error);
+    }
+  };
 
   // ดึงข้อมูลผู้ใช้ทั้งหมด
   useEffect(() => {
@@ -119,8 +150,38 @@ const UserList = () => {
 
   const handleUserClick = async (user) => {
     setSelectedUser(user);
-    await fetchUserDetails(user.key);
+    await Promise.all([
+      fetchUserDetails(user.key),
+      fetchUserGroups(user.userId),
+    ]);
     setIsModalVisible(true);
+  };
+  const renderGroupStatus = (status) => {
+    const statusMap = {
+      1: { text: "กำลังยืนยันการแชร์", color: "orange" },
+      2: { text: "กำลังดำเนินการซื้อสินค้า", color: "blue" },
+      3: { text: "กำลังดำเนินการนัดรับ", color: "purple" },
+      4: { text: "นัดรับสำเร็จ", color: "green" },
+    };
+    return (
+      <Tag color={statusMap[status]?.color}>{statusMap[status]?.text}</Tag>
+    );
+  };
+  const renderGroupType = (type) => {
+    return (
+      <Tag color={type === 1 ? "red" : "red"}>
+        {type === 1 ? "โอนก่อน" : "จ่ายหลังนัดรับ"}
+      </Tag>
+    );
+  };
+
+  // เพิ่มฟังก์ชั่นสำหรับแสดงประเภทการแชร์
+  const renderGroupGenre = (genre) => {
+    return (
+      <Tag color={genre === 1 ? "blue" : "cyan"}>
+        {genre === 1 ? "แชร์ซื้อสินค้า" : "สินค้าลดราคา"}
+      </Tag>
+    );
   };
 
   const filteredUsers = users.filter(
@@ -174,11 +235,30 @@ const UserList = () => {
       dataIndex: "status",
       key: "status",
       width: 100,
-      render: (status) => (
-        <Tag color={status === "1" ? "green" : "red"}>
-          {status === "1" ? "ปกติ" : "ถูกระงับ"}
-        </Tag>
-      ),
+      render: (status) => {
+        let color;
+        let text;
+
+        switch (status) {
+          case "1":
+            color = "green";
+            text = "ปกติ";
+            break;
+          case "0":
+            color = "red";
+            text = "ถูกระงับ";
+            break;
+          case "2":
+            color = "gold";
+            text = "VIP";
+            break;
+          default:
+            color = "gray";
+            text = "ไม่ทราบสถานะ";
+        }
+
+        return <Tag color={color}>{text}</Tag>;
+      },
     },
     {
       title: "User ID",
@@ -193,7 +273,7 @@ const UserList = () => {
       width: 50,
       render: (_, record) => (
         <Button type="primary" onClick={() => handleUserClick(record)}>
-          ตรวจดูการรีวิวและรายงาน
+          ตรวจดูรายการข้อมูล
         </Button>
       ),
     },
@@ -236,12 +316,19 @@ const UserList = () => {
         <Button
           type={activeTab === "reports" ? "primary" : "default"}
           onClick={() => setActiveTab("reports")}
+          style={{ marginRight: 8 }}
         >
           รายงาน ({reports.length})
         </Button>
+        <Button
+          type={activeTab === "groups" ? "primary" : "default"}
+          onClick={() => setActiveTab("groups")}
+        >
+          กลุ่มที่เข้าร่วม ({userGroups.length})
+        </Button>
       </div>
 
-      {activeTab === "reviews" ? (
+      {activeTab === "reviews" && (
         <List
           itemLayout="vertical"
           dataSource={reviews}
@@ -258,7 +345,9 @@ const UserList = () => {
             </List.Item>
           )}
         />
-      ) : (
+      )}
+
+      {activeTab === "reports" && (
         <List
           itemLayout="vertical"
           dataSource={reports}
@@ -298,6 +387,48 @@ const UserList = () => {
                     />
                   </div>
                 )}
+              </div>
+            </List.Item>
+          )}
+        />
+      )}
+
+      {activeTab === "groups" && (
+        <List
+          itemLayout="vertical"
+          dataSource={userGroups}
+          locale={{ emptyText: "ไม่ได้เข้าร่วมกลุ่มใด" }}
+          renderItem={(group) => (
+            <List.Item>
+              <div style={{ display: "flex", gap: "16px" }}>
+                <img
+                  src={group.groupImage || "https://via.placeholder.com/100"}
+                  alt={group.groupName}
+                  style={{
+                    width: 100,
+                    height: 100,
+                    objectFit: "cover",
+                    borderRadius: "8px",
+                  }}
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = "https://via.placeholder.com/100";
+                  }}
+                />
+                <div>
+                  <Text strong style={{ fontSize: "16px" }}>
+                    {group.groupName}
+                  </Text>
+                  <div style={{ margin: "8px 0" }}>
+                    {renderGroupType(group.groupType)}
+                    {renderGroupStatus(group.groupStatus)}
+                    {renderGroupGenre(group.groupGenre)}
+                  </div>
+                  <Text type="secondary">{group.groupDesc}</Text>
+                  <div style={{ marginTop: "8px" }}>
+                    <Text type="secondary">จำนวนสมาชิก: {group.groupSize}</Text>
+                  </div>
+                </div>
               </div>
             </List.Item>
           )}

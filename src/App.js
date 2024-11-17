@@ -6,6 +6,7 @@ import DashboardContent from "./components/DashboardContent";
 import UserList from "./components/UserList";
 import PostList from "./components/PostList";
 import ReportBox from "./components/ReportBox";
+import VipList from "./components/VipBox";
 import "./App.css";
 
 function App() {
@@ -19,6 +20,8 @@ function App() {
             <Route path="/user-list" element={<UserList />} />
             <Route path="/post-list" element={<PostList />} />
             <Route path="/report-box" element={<ReportBox />} />
+            <Route path="/vip-list" element={<VipList />} />
+
           </Routes>
         </div>
       </div>

@@ -330,16 +330,6 @@ const PostList = () => {
                     alignItems: "center",
                   }}
                 >
-                  <img
-                    src={member.imageUrl || "/api/placeholder/32/32"}
-                    alt={member.username}
-                    style={{
-                      width: "32px",
-                      height: "32px",
-                      borderRadius: "50%",
-                      marginRight: "12px",
-                    }}
-                  />
                   <div>
                     <p style={{ margin: 0, fontWeight: 500 }}>
                       {member.username}

@@ -257,8 +257,8 @@
 }
 
 .dismiss-button {
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #2563eb;
+  color: #e2e8f0;
   padding: 0.625rem 1.25rem;
   border-radius: 0.5rem;
   font-size: 0.875rem;
@@ -335,4 +335,57 @@
   .table-container {
     -webkit-overflow-scrolling: touch;
   }
+}
+/* Add these styles to your existing ReportBox.css file */
+
+.confirmation-modal {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 90%;
+  position: relative;
+  z-index: 1001;
+}
+
+.confirmation-content {
+  text-align: center;
+}
+
+.confirmation-content h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+}
+
+.confirmation-content p {
+  margin-bottom: 1.5rem;
+  color: #666;
+}
+
+.confirmation-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.confirmation-buttons button {
+  padding: 0.5rem 1.5rem;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.confirm-button {
+  color: white;
+}
+
+.cancel-button {
+  background-color: #e0e0e0;
+  color: #666;
+}
+
+.cancel-button:hover {
+  background-color: #d0d0d0;
 }
