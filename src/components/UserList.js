@@ -114,7 +114,7 @@ const UserList = () => {
     try {
       // ดึง reviews
       const reviewsSnapshot = await getDocs(
-        collection(db, `users/${userId}/reviews`)
+        collection(db, `reviews`)
       );
       const reviewsPromises = reviewsSnapshot.docs.map(async (doc) => {
         const reviewData = doc.data();
@@ -130,7 +130,7 @@ const UserList = () => {
 
       // ดึง reports
       const reportsSnapshot = await getDocs(
-        collection(db, `users/${userId}/reports`)
+        collection(db, `reports`)
       );
       const reportsPromises = reportsSnapshot.docs.map(async (doc) => {
         const reportData = doc.data();
