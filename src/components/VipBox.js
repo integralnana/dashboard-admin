@@ -6,12 +6,13 @@ import {
   updateDoc,
   doc,
   setDoc,
+  deleteDoc,
   Timestamp,
   collectionGroup,
   getDoc,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
-import { AlertCircle, CheckCircle, XCircle, X, Users } from "lucide-react";
+import { AlertCircle, CheckCircle, XCircle, X, Users, Ban } from "lucide-react";
 
 // Confirmation Modal Component
 const ConfirmationModal = ({
@@ -34,6 +35,12 @@ const ConfirmationModal = ({
       title: "ยืนยันการปฏิเสธ",
       message: `คุณแน่ใจหรือไม่ที่จะปฏิเสธคำขอ VIP ของ ${username}?`,
       confirmText: "ปฏิเสธ",
+      confirmClass: "bg-red-600 hover:bg-red-700",
+    },
+    cancel: {
+      title: "ยืนยันการยกเลิก VIP",
+      message: `คุณแน่ใจหรือไม่ที่จะยกเลิกสถานะ VIP ของ ${username}?`,
+      confirmText: "ยกเลิก VIP",
       confirmClass: "bg-red-600 hover:bg-red-700",
     },
   };
@@ -138,7 +145,7 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-const VipUserCard = ({ user }) => {
+const VipUserCard = ({ user, onCancelVip }) => {
   const now = new Date();
   const isExpired = user.expiredAt.toDate() < now;
 
@@ -161,15 +168,24 @@ const VipUserCard = ({ user }) => {
             หมดอายุ: {user.expiredAt.toDate().toLocaleDateString("th-TH")}
           </p>
         </div>
-        <span
-          className={`px-2 py-1 text-xs rounded-full ${
-            isExpired
-              ? "bg-red-100 text-red-800"
-              : "bg-green-100 text-green-800"
-          }`}
-        >
-          {isExpired ? "หมดอายุ" : "กำลังใช้งาน"}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span
+            className={`px-2 py-1 text-xs rounded-full ${
+              isExpired
+                ? "bg-red-100 text-red-800"
+                : "bg-green-100 text-green-800"
+            }`}
+          >
+            {isExpired ? "หมดอายุ" : "กำลังใช้งาน"}
+          </span>
+          <button
+            onClick={() => onCancelVip(user)}
+            className="p-1 rounded-full hover:bg-red-100 text-red-600 transition-colors"
+            title="ยกเลิก VIP"
+          >
+            <Ban className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -183,12 +199,21 @@ export function VipList() {
   const [error, setError] = useState(null);
   const [processingId, setProcessingId] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [vipFilter, setVipFilter] = useState("all"); // "all", "active", "expired"
+  const [processingVipCancel, setProcessingVipCancel] = useState(false);
   // Add confirmation modal state
   const [confirmationModal, setConfirmationModal] = useState({
     isOpen: false,
     action: null,
     request: null,
   });
+  const handleCancelVip = async (user) => {
+    setConfirmationModal({
+      isOpen: true,
+      action: "cancel",
+      request: { username: user.username, userId: user.userId },
+    });
+  };
 
   const fetchVIPRequests = async () => {
     try {
@@ -282,9 +307,51 @@ export function VipList() {
       await handleApprove(request);
     } else if (action === "reject") {
       await handleReject(request);
+    } else if (action === "cancel") {
+      await handleCancelVipConfirmed(request);
     }
 
     setConfirmationModal({ isOpen: false, action: null, request: null });
+  };
+  const handleCancelVipConfirmed = async (request) => {
+    setProcessingVipCancel(true);
+    try {
+      // Update user status
+      const userRef = doc(db, "users", request.userId);
+      await updateDoc(userRef, {
+        status: "1",
+      });
+      const vipStatusRef = doc(
+        db,
+        "users",
+        request.userId,
+        "vipstatus",
+        request.userId
+      );
+      await deleteDoc(vipStatusRef);
+
+      // Add notification
+      const pendingnotiRef = doc(
+        db,
+        "users",
+        request.userId,
+        "pendingnoti",
+        request.userId
+      );
+      await setDoc(pendingnotiRef, {
+        groupName: "",
+        pendingcom: "สถานะ VIP ของคุณถูกยกเลิก",
+        timestamp: Timestamp.now(),
+      });
+
+      // Refresh VIP users list
+      await fetchVIPUsers();
+    } catch (err) {
+      setError("Failed to cancel VIP status");
+      console.error(err);
+    } finally {
+      setProcessingVipCancel(false);
+    }
   };
 
   const handleCloseConfirmation = () => {
@@ -371,6 +438,14 @@ export function VipList() {
       setProcessingId(null);
     }
   };
+  const filteredVipUsers = vipUsers.filter((user) => {
+    const now = new Date();
+    const isExpired = user.expiredAt.toDate() < now;
+
+    if (vipFilter === "active") return !isExpired;
+    if (vipFilter === "expired") return isExpired;
+    return true;
+  });
 
   const filteredRequests = vipRequests.filter((request) => {
     if (activeTab === "pending") return request.status === "pending";
@@ -427,15 +502,55 @@ export function VipList() {
         </TabButton>
       </div>
 
+      {activeTab === "vipUsers" && (
+        <div className="mb-4 flex gap-2">
+          <button
+            onClick={() => setVipFilter("all")}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              vipFilter === "all"
+                ? "bg-blue-100 text-blue-700"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            ทั้งหมด
+          </button>
+          <button
+            onClick={() => setVipFilter("active")}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              vipFilter === "active"
+                ? "bg-green-100 text-green-700"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            กำลังใช้งาน
+          </button>
+          <button
+            onClick={() => setVipFilter("expired")}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+              vipFilter === "expired"
+                ? "bg-red-100 text-red-700"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            หมดอายุ
+          </button>
+        </div>
+      )}
+
       {activeTab === "vipUsers" ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {vipUsers.length === 0 ? (
+          {filteredVipUsers.length === 0 ? (
             <div className="col-span-full text-center py-8 text-gray-500">
               ไม่พบรายชื่อสมาชิก VIP
+              {vipFilter !== "all" && " ในหมวดที่เลือก"}
             </div>
           ) : (
-            vipUsers.map((user) => (
-              <VipUserCard key={user.userId} user={user} />
+            filteredVipUsers.map((user) => (
+              <VipUserCard
+                key={user.userId}
+                user={user}
+                onCancelVip={handleCancelVip}
+              />
             ))
           )}
         </div>
@@ -508,6 +623,14 @@ export function VipList() {
                   {processingId === request.id && (
                     <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-sm">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                    </div>
+                  )}
+                  {processingVipCancel && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                      <div className="bg-white rounded-lg p-4 flex items-center gap-3">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                        <span>กำลังยกเลิกสถานะ VIP...</span>
+                      </div>
                     </div>
                   )}
                 </div>
